@@ -1,0 +1,22 @@
+name: valve-dump
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every game in the live league feed
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+        run: |
+          curl -sS --max-time 30 "https://api.steampowered.com/IDOTA2Match_570/GetLiveLeagueGames/v1/?key=$STEAM_API_KEY" -o v.json -w "HTTP %{http_code}\n"
+          echo "games: $(jq '.result.games | length' v.json)"
+          jq -r '.result.games[] |
+            "league=\(.league_id) match=\(.match_id) " +
+            "radiant=\(.radiant_team.team_name // "?")(\(.radiant_team.team_id // "-")) " +
+            "dire=\(.dire_team.team_name // "?")(\(.dire_team.team_id // "-")) " +
+            "dur=\(.scoreboard.duration // "no-scoreboard") " +
+            "rpicks=\([.scoreboard.radiant.picks[]?] | length) rbans=\([.scoreboard.radiant.bans[]?] | length) " +
+            "dpicks=\([.scoreboard.dire.picks[]?] | length) dbans=\([.scoreboard.dire.bans[]?] | length)"' v.json
