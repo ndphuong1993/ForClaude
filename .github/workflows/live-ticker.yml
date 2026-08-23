@@ -35,6 +35,7 @@ jobs:
           MINUTES: ${{ github.event.inputs.minutes || '50' }}
           SERIES: ${{ github.event.inputs.series_id || '1133004' }}
           INTERVAL: ${{ github.event.inputs.interval || '30' }}
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
           TEAM_A: vision
           TEAM_B: spirit
         run: |
