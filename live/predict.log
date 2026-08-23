@@ -5,3 +5,4 @@ DRAFT COMPLETE match 8960882635 | TEAM VISION 47.3% - 52.7% Team Spirit   [hero-
 === DRAFT COMPLETE match 8960991322 | TEAM VISION (radiant) vs Team Spirit (dire)
   TEAM VISION: Invoker, Rubick, Axe, Hoodwink, Juggernaut
   Team Spirit: Bane, Pangolier, Mirana, Lifestealer, Dark Seer
+  [1] trained model      TEAM VISION 42.2% - 57.8% Team Spirit   (holdout acc 0.530 vs baseline .522, auc 0.530)
