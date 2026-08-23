@@ -1,8 +1,6 @@
 name: alt-sources
 
 on:
-  push:
-    branches: ['**']
   workflow_dispatch:
 
 jobs:

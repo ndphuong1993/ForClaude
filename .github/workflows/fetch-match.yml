@@ -1,8 +1,6 @@
 name: fetch-match
 
 on:
-  push:
-    branches: ['**']
   workflow_dispatch:
     inputs:
       url:

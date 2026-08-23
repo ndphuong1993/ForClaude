@@ -1,8 +1,6 @@
 name: match-status
 
 on:
-  push:
-    branches: ['**']
   workflow_dispatch:
     inputs:
       series_id:
