@@ -1,0 +1,19 @@
+name: snapshot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: One reading, then exit
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          MINUTES: "0.01"
+          INTERVAL: "1"
+          LATE_MIN: "999"
+        run: python3 live/ticker.py
