@@ -7,6 +7,10 @@ on:
         description: "How long to wait for a completed draft"
         required: false
         default: "40"
+      players_only:
+        description: "Wait until the feed maps heroes to accounts, then score with player mastery"
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -26,6 +30,7 @@ jobs:
         env:
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
           MINUTES: ${{ github.event.inputs.minutes || '40' }}
+          PLAYERS_ONLY: ${{ github.event.inputs.players_only || '0' }}
         run: |
           git config user.name "predict5"
           git config user.email "actions@github.com"

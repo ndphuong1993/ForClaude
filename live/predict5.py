@@ -19,6 +19,9 @@ KEY = os.environ["STEAM_API_KEY"]
 LEAGUE = int(os.environ.get("LEAGUE_ID", "19719"))
 TEAM_IDS = {9572001, 7119388}
 MINUTES = float(os.environ.get("MINUTES", "40"))
+# Valve fills in per-player hero_id only once the game starts, so the player
+# mastery signal cannot be computed at draft time. Set PLAYERS_ONLY to wait.
+PLAYERS_ONLY = os.environ.get("PLAYERS_ONLY", "") == "1"
 LOG = "live/predict.log"
 VALVE = "https://api.steampowered.com/IDOTA2Match_570/GetLiveLeagueGames/v1/?key=" + KEY
 
@@ -100,6 +103,12 @@ def main():
                 sb = g.get("scoreboard") or {}
                 if len((sb.get("radiant", {}) or {}).get("picks", []) or []) == 5 and \
                    len((sb.get("dire", {}) or {}).get("picks", []) or []) == 5:
+                    if PLAYERS_ONLY:
+                        known = sum(1 for side in ("radiant", "dire")
+                                    for pl in (sb.get(side, {}) or {}).get("players", []) or []
+                                    if pl.get("account_id") and pl.get("hero_id"))
+                        if known < 8:
+                            continue
                     target = g
                     break
         if not target:
@@ -114,7 +123,9 @@ def main():
         rad_ids = [p["hero_id"] for p in sb["radiant"]["picks"]]
         dire_ids = [p["hero_id"] for p in sb["dire"]["picks"]]
 
-        emit("=== DRAFT COMPLETE match %s | %s (radiant) vs %s (dire)" % (target.get("match_id"), rad_name, dire_name))
+        emit("=== %s match %s | %s (radiant) vs %s (dire)"
+             % ("UPDATED WITH PLAYER MASTERY" if PLAYERS_ONLY else "DRAFT COMPLETE",
+                target.get("match_id"), rad_name, dire_name))
         emit("  %s: %s" % (rad_name, ", ".join(heroes.get(h, str(h)) for h in rad_ids)))
         emit("  %s: %s" % (dire_name, ", ".join(heroes.get(h, str(h)) for h in dire_ids)))
 
@@ -148,11 +159,16 @@ def main():
 
         re_, rl = player_edge("radiant")
         de_, dl = player_edge("dire")
-        pz = 6.0 * (re_ - de_)
-        emit("  [2] player mastery     %s %.1f%% - %.1f%% %s   (sum edge %+.3f vs %+.3f)"
-             % (rad_name, sigmoid(pz) * 100, (1 - sigmoid(pz)) * 100, dire_name, re_, de_))
-        emit("      %s: %s" % (rad_name, "; ".join(rl)))
-        emit("      %s: %s" % (dire_name, "; ".join(dl)))
+        have_players = bool(rl) and bool(dl)
+        pz = 6.0 * (re_ - de_) if have_players else 0.0
+        if have_players:
+            emit("  [2] player mastery     %s %.1f%% - %.1f%% %s   (sum edge %+.3f vs %+.3f)"
+                 % (rad_name, sigmoid(pz) * 100, (1 - sigmoid(pz)) * 100, dire_name, re_, de_))
+            emit("      %s: %s" % (rad_name, "; ".join(rl)))
+            emit("      %s: %s" % (dire_name, "; ".join(dl)))
+        else:
+            emit("  [2] player mastery     UNAVAILABLE - the feed carries no hero per account yet; "
+                 "its weight is redistributed rather than counted as even")
 
         # 3. team comfort on these heroes
         def team_edge(tid, ids):
@@ -194,7 +210,13 @@ def main():
              % (rad_name, sigmoid(hz) * 100, (1 - sigmoid(hz)) * 100, dire_name, rpr, dpr))
 
         # blend - weights are hand-set, not fitted
-        blend = 0.55 * z + 0.20 * pz + 0.15 * tz + 0.10 * hz
+        # Redistribute a missing signal's weight instead of letting a neutral 50%
+        # drag the blend toward the middle and look like evidence of a close game.
+        parts = [(0.55, z), (0.15, tz), (0.10, hz)]
+        if have_players:
+            parts.append((0.20, pz))
+        total_w = sum(w for w, _ in parts)
+        blend = sum(w * v for w, v in parts) / total_w
         p = sigmoid(blend)
         emit("  ==> COMBINED  %s %.1f%% - %.1f%% %s   [blend weights are hand-set, not validated]"
              % (rad_name, p * 100, (1 - p) * 100, dire_name))
