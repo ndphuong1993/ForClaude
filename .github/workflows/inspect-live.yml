@@ -19,5 +19,3 @@ jobs:
             "  radiant=\(.team_name_radiant) score=\(.radiant_score)  dire=\(.team_name_dire) score=\(.dire_score)  lead=\(.radiant_lead)\n" +
             "  building_state=\(.building_state)"
           ' live.json
-          echo "--- full JSON of those entries ---"
-          jq '[.[] | select(((.team_name_radiant + " " + .team_name_dire) | ascii_downcase) | test("vision") and test("spirit"))]' live.json
