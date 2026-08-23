@@ -1,0 +1,81 @@
+name: fetch-match
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL to fetch"
+        required: true
+        default: "https://cyberscore.live/en/matches/team-vision-vs-team-spirit-184860/"
+      render:
+        description: "Render with headless browser (for JS pages)"
+        required: false
+        default: "true"
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Plain HTTP fetch
+        run: |
+          set -x
+          curl -sS -L --max-time 60 \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" \
+            -H "Accept-Language: en-US,en;q=0.9" \
+            -o raw.html -w "HTTP %{http_code} size=%{size_download}\n" \
+            "${{ github.event.inputs.url }}" || true
+          wc -c raw.html || true
+
+      - name: Render with Playwright
+        if: ${{ github.event.inputs.render == 'true' }}
+        run: |
+          npm i -g playwright@1.47.2 >/dev/null 2>&1 || npm i -g playwright
+          npx --yes playwright@1.47.2 install --with-deps chromium
+          cat > render.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const b = await chromium.launch();
+            const p = await b.newPage({ locale: 'en-US' });
+            await p.goto(process.argv[2], { waitUntil: 'networkidle', timeout: 90000 });
+            await p.waitForTimeout(4000);
+            const fs = require('fs');
+            fs.writeFileSync('rendered.html', await p.content());
+            fs.writeFileSync('rendered.txt', await p.evaluate(() => document.body.innerText));
+            await b.close();
+          })();
+          JS
+          NODE_PATH=$(npm root -g) node render.js "${{ github.event.inputs.url }}"
+
+      - name: Extract text
+        run: |
+          python3 - <<'PY'
+          import re, html, os
+          def text_from(fn):
+              if not os.path.exists(fn): return ""
+              s = open(fn, encoding="utf-8", errors="ignore").read()
+              s = re.sub(r"(?is)<(script|style|svg|noscript)[^>]*>.*?</\1>", " ", s)
+              s = re.sub(r"(?s)<[^>]+>", "\n", s)
+              s = html.unescape(s)
+              return "\n".join(l.strip() for l in s.splitlines() if l.strip())
+          out = ""
+          if os.path.exists("rendered.txt"):
+              out = open("rendered.txt", encoding="utf-8", errors="ignore").read()
+              print("=== SOURCE: rendered.txt (browser) ===")
+          if not out.strip():
+              out = text_from("rendered.html") or text_from("raw.html")
+              print("=== SOURCE: html-stripped ===")
+          open("extracted.txt","w",encoding="utf-8").write(out)
+          print(out[:20000])
+          print("=== END (total chars: %d) ===" % len(out))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fetch-output
+          path: |
+            raw.html
+            rendered.html
+            rendered.txt
+            extracted.txt
+          if-no-files-found: warn
