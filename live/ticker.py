@@ -81,9 +81,10 @@ def main():
                 rad, dire = m["team_name_radiant"], m["team_name_dire"]
                 p = win_prob(m["radiant_lead"], m["radiant_score"] - m["dire_score"], minute)
                 ahead = rad if m["radiant_lead"] >= 0 else dire
-                line = ("%s | %02d:%02d | %s %.1f%% - %.1f%% %s | gold %+.1fk (%s) | kills %d-%d | series %s"
+                line = ("%s | %02d:%02d | %s %.1f%% - %.1f%% %s | gold +%.1fk %s | kills %s %d - %d %s | series %s"
                         % (stamp, int(minute), int(minute % 1 * 60), rad, p * 100, (1 - p) * 100, dire,
-                           abs(m["radiant_lead"]) / 1000.0, ahead, m["radiant_score"], m["dire_score"], sc or "0-0"))
+                           abs(m["radiant_lead"]) / 1000.0, ahead,
+                           rad, m["radiant_score"], m["dire_score"], dire, sc or "0-0"))
             else:
                 line = "%s | no live game right now | series %s (%d games played)" % (stamp, sc or "0-0", len(games))
         except Exception as e:
