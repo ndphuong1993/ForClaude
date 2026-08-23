@@ -1,6 +1,8 @@
 name: fetch-match
 
 on:
+  push:
+    branches: ['**']
   workflow_dispatch:
     inputs:
       url:
@@ -23,11 +25,11 @@ jobs:
             -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" \
             -H "Accept-Language: en-US,en;q=0.9" \
             -o raw.html -w "HTTP %{http_code} size=%{size_download}\n" \
-            "${{ github.event.inputs.url }}" || true
+            "${{ github.event.inputs.url || vars.MATCH_URL || 'https://cyberscore.live/en/matches/team-vision-vs-team-spirit-184860/' }}" || true
           wc -c raw.html || true
 
       - name: Render with Playwright
-        if: ${{ github.event.inputs.render == 'true' }}
+        if: ${{ github.event.inputs.render != 'false' }}
         run: |
           npm i -g playwright@1.47.2 >/dev/null 2>&1 || npm i -g playwright
           npx --yes playwright@1.47.2 install --with-deps chromium
@@ -44,7 +46,7 @@ jobs:
             await b.close();
           })();
           JS
-          NODE_PATH=$(npm root -g) node render.js "${{ github.event.inputs.url }}"
+          NODE_PATH=$(npm root -g) node render.js "${{ github.event.inputs.url || vars.MATCH_URL || 'https://cyberscore.live/en/matches/team-vision-vs-team-spirit-184860/' }}"
 
       - name: Extract text
         run: |
