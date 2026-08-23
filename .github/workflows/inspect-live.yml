@@ -1,0 +1,23 @@
+name: inspect-live
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump the raw live entry for Vision vs Spirit
+        run: |
+          curl -sS --max-time 30 https://api.opendota.com/api/live > live.json
+          echo "server time now: $(date -u +%s) ($(date -u))"
+          jq -r '
+            [.[] | select(((.team_name_radiant + " " + .team_name_dire) | ascii_downcase)
+                          | test("vision") and test("spirit"))] | .[] |
+            "match_id=\(.match_id) activate=\(.activate_time) last_update=\(.last_update_time) deactivate=\(.deactivate_time) " +
+            "game_time=\(.game_time) delay=\(.delay) league=\(.league_id)\n" +
+            "  radiant=\(.team_name_radiant) score=\(.radiant_score)  dire=\(.team_name_dire) score=\(.dire_score)  lead=\(.radiant_lead)\n" +
+            "  building_state=\(.building_state)"
+          ' live.json
+          echo "--- full JSON of those entries ---"
+          jq '[.[] | select(((.team_name_radiant + " " + .team_name_dire) | ascii_downcase) | test("vision") and test("spirit"))]' live.json
