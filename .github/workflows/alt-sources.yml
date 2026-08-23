@@ -1,0 +1,25 @@
+name: alt-sources
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe alternative data sources
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+          probe () {
+            echo "=================== $1"
+            curl -sS -L --max-time 45 -A "$UA" -H "Accept-Language: en-US,en;q=0.9" \
+              -w "\n--- HTTP %{http_code} size=%{size_download}\n" "$1" -o body.out || true
+            head -c 3000 body.out; echo; echo "--- (bytes: $(wc -c < body.out))"
+          }
+          probe "https://api.opendota.com/api/live"
+          probe "https://api.opendota.com/api/proMatches"
+          probe "https://liquipedia.net/dota2/api.php?action=opensearch&search=Team%20Spirit&limit=5&format=json"
+          probe "https://r.jina.ai/https://cyberscore.live/en/matches/team-vision-vs-team-spirit-184860/"
+          probe "https://cyberscore.live/api/matches/184860"
