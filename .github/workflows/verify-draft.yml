@@ -1,0 +1,17 @@
+name: verify-draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      match_id:
+        description: "Match id to verify the captured draft against"
+        required: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - run: python3 live/verify.py "${{ github.event.inputs.match_id }}"
