@@ -115,7 +115,7 @@ def features(rad, dire, w, b, idx, syn, ctr, base):
         for d in dire:
             if (a, d) in ctr:
                 c += shrunk(ctr[(a, d)], base)
-    return [lin, s, c]
+    return [lin, s / 10.0, c / 25.0]
 
 
 def train_stack(feats, ys, epochs=300, lr=0.05):
@@ -157,8 +157,9 @@ def main():
         print("not enough data to train honestly")
         sys.exit(1)
 
-    cut = int(len(rows) * 0.8)
-    train, test = rows[cut:], rows[:cut]          # rows are newest-first, so train on older
+    # rows are newest-first: the most recent 20% is the holdout, the older 80% trains.
+    cut = int(len(rows) * 0.2)
+    test, train = rows[:cut], rows[cut:]
     print("train=%d  test=%d (test is the most recent slice)" % (len(train), len(test)))
 
     heroes = sorted({h for r in train for h in r[0] + r[1]})
@@ -169,8 +170,18 @@ def main():
     syn, ctr = pair_tables(train, base)
     print("pair tables: %d same-team pairs, %d cross matchups" % (len(syn), len(ctr)))
 
-    ftr = [features(r[0], r[1], w, b, idx, syn, ctr, base) for r in train]
-    ytr = [r[2] for r in train]
+    # Out-of-fold pair features. Fitting the stack on the same rows the pair
+    # tables were built from lets it trust synergy that already saw the answer,
+    # which is what wrecked the first run: it drove the linear weight negative.
+    half = len(train) // 2
+    fold_a, fold_b = train[:half], train[half:]
+    syn_a, ctr_a = pair_tables(fold_a, base)
+    syn_b, ctr_b = pair_tables(fold_b, base)
+    ftr, ytr = [], []
+    for rows_, sy, ct in ((fold_b, syn_a, ctr_a), (fold_a, syn_b, ctr_b)):
+        for r in rows_:
+            ftr.append(features(r[0], r[1], w, b, idx, sy, ct, base))
+            ytr.append(r[2])
     sw, sb = train_stack(ftr, ytr)
     print("stack weights: linear=%.3f synergy=%.3f counter=%.3f bias=%.3f" % (sw[0], sw[1], sw[2], sb))
 
