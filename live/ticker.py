@@ -26,7 +26,8 @@ def win_prob(gold_lead, kill_diff, minute):
     slope = min(0.45, 0.10 + 0.0083 * minute)
     logit = slope * gold_lead / 1000.0 + 0.04 * kill_diff
     logit *= min(1.0, minute / 8.0)          # the first minutes decide little
-    return 1.0 / (1.0 + math.exp(-max(-8.0, min(8.0, logit))))
+    p = 1.0 / (1.0 + math.exp(-max(-8.0, min(8.0, logit))))
+    return min(0.99, max(0.01, p))
 
 
 def series_score(pro):
@@ -38,13 +39,19 @@ def series_score(pro):
     return games, wins
 
 
-def find_live(live):
+def find_live(live, finished_ids):
+    """The live feed keeps serving a game for a while after it ends, so drop
+    anything that already has a result and take the latest game that started."""
+    cands = []
     for m in live:
         names = (m.get("team_name_radiant") or "") + " " + (m.get("team_name_dire") or "")
         n = names.lower()
-        if TEAM_A in n and TEAM_B in n:
-            return m
-    return None
+        if TEAM_A not in n or TEAM_B not in n:
+            continue
+        if str(m.get("match_id")) in finished_ids or m.get("deactivate_time"):
+            continue
+        cands.append(m)
+    return max(cands, key=lambda m: m.get("activate_time", 0)) if cands else None
 
 
 def emit(line):
@@ -66,8 +73,9 @@ def main():
         try:
             live, pro = get("https://api.opendota.com/api/live"), get("https://api.opendota.com/api/proMatches")
             games, wins = series_score(pro)
+            finished = {str(m["match_id"]) for m in pro}
             sc = " / ".join("%s %d" % (t, w) for t, w in sorted(wins.items()))
-            m = find_live(live)
+            m = find_live(live, finished)
             if m:
                 minute = m["game_time"] / 60.0
                 rad, dire = m["team_name_radiant"], m["team_name_dire"]
