@@ -12,6 +12,7 @@ TEAM_A = os.environ.get("TEAM_A", "vision")     # matched against team names, lo
 TEAM_B = os.environ.get("TEAM_B", "spirit")
 SERIES = int(os.environ.get("SERIES", "1133004"))
 MINUTES = float(os.environ.get("MINUTES", "50"))
+INTERVAL = float(os.environ.get("INTERVAL", "30"))   # seconds between reports
 LOG = "live/ticker.log"
 
 
@@ -93,7 +94,7 @@ def main():
             emit(line)
             last = line
         print(line, flush=True)
-        time.sleep(30)
+        time.sleep(INTERVAL)
 
 
 if __name__ == "__main__":
