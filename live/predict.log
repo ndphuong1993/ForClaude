@@ -7,3 +7,4 @@ DRAFT COMPLETE match 8960882635 | TEAM VISION 47.3% - 52.7% Team Spirit   [hero-
   Team Spirit: Bane, Pangolier, Mirana, Lifestealer, Dark Seer
   [1] trained model      TEAM VISION 42.2% - 57.8% Team Spirit   (holdout acc 0.530 vs baseline .522, auc 0.530)
   [2] player mastery     TEAM VISION 50.0% - 50.0% Team Spirit   (sum edge +0.000 vs +0.000)
+      TEAM VISION: 
