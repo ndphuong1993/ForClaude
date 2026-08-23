@@ -1,0 +1,44 @@
+name: probe-model-data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: What data exists for counters, lanes, teams and players?
+        run: |
+          p () { echo; echo "=== $1"; curl -sS --max-time 40 "$2" -o r.json -w "HTTP %{http_code} bytes=%{size_download}\n"; }
+
+          p "hero-vs-hero matchups (counters) - OpenDota /heroes/1/matchups" \
+            "https://api.opendota.com/api/heroes/1/matchups"
+          jq -r 'sort_by(-.games_played) | .[:4][] | "  vs hero \(.hero_id): \(.wins)/\(.games_played) = \((.wins/.games_played*100)|floor)%"' r.json
+
+          p "lane roles - OpenDota /scenarios/laneRoles?hero_id=1" \
+            "https://api.opendota.com/api/scenarios/laneRoles?hero_id=1"
+          jq -r '.[:6][] | "  lane_role=\(.lane_role) time=\(.time) games=\(.games) wins=\(.wins)"' r.json
+
+          p "team hero history - Team Spirit (7119388)" \
+            "https://api.opendota.com/api/teams/7119388/heroes"
+          jq -r 'sort_by(-.games_played) | .[:5][] | "  \(.localized_name): \(.wins)/\(.games_played)"' r.json
+
+          p "team hero history - TEAM VISION (9572001)" \
+            "https://api.opendota.com/api/teams/9572001/heroes"
+          jq -r 'sort_by(-.games_played) | .[:5][] | "  \(.localized_name): \(.wins)/\(.games_played)"' r.json
+
+          p "player hero history - account 73401082 (Dukalis, VISION)" \
+            "https://api.opendota.com/api/players/73401082/heroes"
+          jq -r 'sort_by(-.games) | .[:5][] | "  hero \(.hero_id): \(.win)/\(.games) games, last played \(.last_played)"' r.json
+
+          p "team roster + player list - Team Spirit" \
+            "https://api.opendota.com/api/teams/7119388/players"
+          jq -r '[.[] | select(.is_current_team_member)] | .[:6][] | "  \(.name) account=\(.account_id) games=\(.games_played)"' r.json
+
+          p "heroStats sample fields (what the current predictor uses)" \
+            "https://api.opendota.com/api/heroStats"
+          jq -r '.[0] | "  keys: " + ([keys[] | select(test("pro|pick|win|_pick|_win"))] | join(", "))' r.json
+
+          echo
+          echo "=== Stratz GraphQL without a token (real synergy/counter data lives here)"
+          curl -sS --max-time 20 -o /dev/null -w "HTTP %{http_code}\n" https://api.stratz.com/graphql || true
