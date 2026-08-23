@@ -19,6 +19,10 @@ on:
         description: "Game minute after which only teamfights are reported"
         required: false
         default: "30"
+      late_poll:
+        description: "Late-game poll window in seconds; deaths inside one window count as a fight"
+        required: false
+        default: "25"
 
 permissions:
   contents: write
@@ -41,7 +45,7 @@ jobs:
           INTERVAL: ${{ github.event.inputs.interval || '30' }}
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
           LATE_MIN: ${{ github.event.inputs.late_min || '30' }}
-          LATE_POLL: '15'
+          LATE_POLL: ${{ github.event.inputs.late_poll || '25' }}
           FIGHT_KILLS: '2'
           TEAM_A: vision
           TEAM_B: spirit
