@@ -28,10 +28,15 @@ def emit(line):
         f.write(line + "\n")
     subprocess.run(["git", "add", LOG], check=False)
     subprocess.run(["git", "commit", "-q", "-m", "draft: " + line[:70]], check=False)
-    for attempt in range(4):
+    branch = os.environ.get("GITHUB_REF_NAME", "HEAD")
+    for attempt in range(5):
         if subprocess.run(["git", "push", "-q", "origin", "HEAD"]).returncode == 0:
             return
+        # Someone else pushed to the branch; rebase onto it rather than giving up,
+        # otherwise the line stays on the runner and never reaches the reader.
+        subprocess.run(["git", "pull", "--rebase", "-q", "origin", branch], check=False)
         time.sleep(2 ** attempt)
+    print("WARNING: could not push: " + line, flush=True)
 
 
 def main():
