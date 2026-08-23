@@ -1,0 +1,25 @@
+name: probe-explorer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Can we pull bulk pro drafts for training?
+        run: |
+          SQL='select m.match_id, m.radiant_win, pm.hero_id, pm.player_slot from matches m join player_matches pm using(match_id) where m.start_time > extract(epoch from now() - interval %2740 days%27) limit 50'
+          echo "=== /api/explorer"
+          curl -sS --max-time 60 -G "https://api.opendota.com/api/explorer" --data-urlencode "sql=$SQL" -o e.json -w "HTTP %{http_code} bytes=%{size_download}\n"
+          jq -r 'if .err then "ERROR: \(.err)" else "rows=\(.rowCount // (.rows|length)) fields=\([.fields[]?.name] | join(","))\n" + ([.rows[:3][] | tostring] | join("\n")) end' e.json 2>/dev/null || head -c 400 e.json
+
+          echo
+          echo "=== fallback: bulk pro matches via /api/proMatches paging"
+          curl -sS --max-time 40 "https://api.opendota.com/api/proMatches" -o p.json -w "HTTP %{http_code} bytes=%{size_download}\n"
+          jq -r '"newest=\(.[0].match_id) oldest_in_page=\(.[-1].match_id) count=\(length)  (page back with ?less_than_match_id=)"' p.json
+
+          echo
+          echo "=== does a single parsed match carry the full draft?"
+          curl -sS --max-time 40 "https://api.opendota.com/api/matches/8960762254" -o m.json -w "HTTP %{http_code}\n"
+          jq -r '"picks_bans=\(.picks_bans|length) radiant_win=\(.radiant_win) players_with_lane=\([.players[] | select(.lane != null)] | length)/10 lane_roles=\([.players[].lane_role] | join(","))"' m.json
