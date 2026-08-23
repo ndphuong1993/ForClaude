@@ -1,0 +1,39 @@
+name: live-ticker
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long to keep polling"
+        required: false
+        default: "50"
+      series_id:
+        description: "OpenDota series id (for the series score)"
+        required: false
+        default: "1133004"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-ticker
+  cancel-in-progress: true
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Poll OpenDota every 30s
+        env:
+          MINUTES: ${{ github.event.inputs.minutes || '50' }}
+          SERIES: ${{ github.event.inputs.series_id || '1133004' }}
+          TEAM_A: vision
+          TEAM_B: spirit
+        run: |
+          git config user.name "live-ticker"
+          git config user.email "actions@github.com"
+          git pull --rebase -q origin "${{ github.ref_name }}" || true
+          python3 live/ticker.py
