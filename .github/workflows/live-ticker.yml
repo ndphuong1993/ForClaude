@@ -12,7 +12,11 @@ on:
         required: false
         default: "1133004"
       interval:
-        description: "Seconds between reports"
+        description: "Seconds between reports, early game"
+        required: false
+        default: "30"
+      late_min:
+        description: "Game minute after which only teamfights are reported"
         required: false
         default: "30"
 
@@ -36,6 +40,9 @@ jobs:
           SERIES: ${{ github.event.inputs.series_id || '1133004' }}
           INTERVAL: ${{ github.event.inputs.interval || '30' }}
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          LATE_MIN: ${{ github.event.inputs.late_min || '30' }}
+          LATE_POLL: '15'
+          FIGHT_KILLS: '2'
           TEAM_A: vision
           TEAM_B: spirit
         run: |

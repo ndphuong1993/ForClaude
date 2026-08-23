@@ -12,7 +12,11 @@ TEAM_A = os.environ.get("TEAM_A", "vision")     # matched against team names, lo
 TEAM_B = os.environ.get("TEAM_B", "spirit")
 SERIES = int(os.environ.get("SERIES", "1133004"))
 MINUTES = float(os.environ.get("MINUTES", "50"))
-INTERVAL = float(os.environ.get("INTERVAL", "30"))   # seconds between reports
+INTERVAL = float(os.environ.get("INTERVAL", "30"))   # seconds between reports, early game
+LATE_MIN = float(os.environ.get("LATE_MIN", "30"))   # game minute after which reporting goes event-driven
+LATE_POLL = int(os.environ.get("LATE_POLL", "15"))   # poll seconds once late
+FIGHT_KILLS = int(os.environ.get("FIGHT_KILLS", "2"))  # deaths inside one window that count as a fight
+SWING_GOLD = float(os.environ.get("SWING_GOLD", "3000"))
 LOG = "live/ticker.log"
 
 
@@ -98,14 +102,20 @@ def emit(line):
 
 
 def main():
+    """Two modes. Before LATE_MIN the ticker reports on a fixed cadence. After
+    it, the poll rate goes up but reporting goes quiet: only a teamfight (two
+    or more deaths inside one poll window) or a large net-worth swing is worth
+    interrupting for."""
     deadline = time.time() + MINUTES * 60
-    last = None
+    last, prev_kills, prev_lead = None, None, None
+
     while time.time() < deadline:
         stamp = time.strftime("%H:%M:%S", time.gmtime(time.time() + 7 * 3600)) + " VN"
+        late, tag = False, ""
         try:
             live, pro = get("https://api.opendota.com/api/live"), get("https://api.opendota.com/api/proMatches")
             games, wins = series_score(pro)
-            finished = {str(m["match_id"]) for m in pro}
+            finished = {str(x["match_id"]) for x in pro}
             sc = " / ".join("%s %d" % (t, w) for t, w in sorted(wins.items()))
             m = None
             try:
@@ -120,22 +130,36 @@ def main():
                          "lead": od["radiant_lead"]}
             if m:
                 minute = m["seconds"] / 60.0
+                late = minute >= LATE_MIN
+                total = m["rscore"] + m["dscore"]
+                if late and prev_kills is not None:
+                    dk, dg = total - prev_kills, m["lead"] - prev_lead
+                    if dk >= FIGHT_KILLS:
+                        tag = " | TEAMFIGHT +%d kills in %ds" % (dk, LATE_POLL)
+                    elif abs(dg) >= SWING_GOLD:
+                        tag = " | GOLD SWING %+.1fk in %ds" % (dg / 1000.0, LATE_POLL)
+                prev_kills, prev_lead = total, m["lead"]
+
                 rad, dire = m["rad"], m["dire"]
                 p = win_prob(m["lead"], m["rscore"] - m["dscore"], minute)
                 ahead = rad if m["lead"] >= 0 else dire
-                line = ("%s | %02d:%02d | %s %.1f%% - %.1f%% %s | gold +%.1fk %s | kills %s %d - %d %s | series %s"
+                line = ("%s | %02d:%02d | %s %.1f%% - %.1f%% %s | gold +%.1fk %s | kills %s %d - %d %s | series %s%s"
                         % (stamp, int(minute), int(minute % 1 * 60), rad, p * 100, (1 - p) * 100, dire,
                            abs(m["lead"]) / 1000.0, ahead,
-                           rad, m["rscore"], m["dscore"], dire, sc or "0-0"))
+                           rad, m["rscore"], m["dscore"], dire, sc or "0-0", tag))
             else:
+                prev_kills = prev_lead = None
                 line = "%s | no live game right now | series %s (%d games played)" % (stamp, sc or "0-0", len(games))
         except Exception as e:
             line = "%s | fetch failed: %s" % (stamp, e)
-        if line[10:] != (last or "")[10:]:
-            emit(line)
-            last = line
+
+        # Quiet once the game is late unless something actually happened.
+        if (not late) or tag:
+            if line[10:] != (last or "")[10:]:
+                emit(line)
+                last = line
         print(line, flush=True)
-        time.sleep(INTERVAL)
+        time.sleep(LATE_POLL if late else INTERVAL)
 
 
 if __name__ == "__main__":
