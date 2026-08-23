@@ -1,0 +1,33 @@
+name: predict5
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long to wait for a completed draft"
+        required: false
+        default: "40"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: predict5
+  cancel-in-progress: true
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Score the draft from every available signal
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          MINUTES: ${{ github.event.inputs.minutes || '40' }}
+        run: |
+          git config user.name "predict5"
+          git config user.email "actions@github.com"
+          git pull --rebase -q origin "${{ github.ref_name }}" || true
+          python3 live/predict5.py
