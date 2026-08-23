@@ -10,6 +10,8 @@ KEY = os.environ["STEAM_API_KEY"]
 TEAM_A = os.environ.get("TEAM_A", "vision")
 TEAM_B = os.environ.get("TEAM_B", "spirit")
 MINUTES = float(os.environ.get("MINUTES", "40"))
+LEAGUE = int(os.environ.get("LEAGUE_ID", "19719"))       # The International 2026
+TEAM_IDS = {9572001, 7119388}                            # TEAM VISION, Team Spirit
 LOG = "live/draft.log"
 VALVE = "https://api.steampowered.com/IDOTA2Match_570/GetLiveLeagueGames/v1/?key=" + KEY
 
@@ -45,16 +47,29 @@ def main():
             time.sleep(15)
             continue
 
-        ours = [g for g in games
-                if TEAM_A in (str(g.get("radiant_team", {}).get("team_name", "")) + str(g.get("dire_team", {}).get("team_name", ""))).lower()
-                and TEAM_B in (str(g.get("radiant_team", {}).get("team_name", "")) + str(g.get("dire_team", {}).get("team_name", ""))).lower()]
+        def is_ours(g):
+            """Valve omits team_name on some entries, so never rely on names alone."""
+            names = (str(g.get("radiant_team", {}).get("team_name", "")) +
+                     str(g.get("dire_team", {}).get("team_name", ""))).lower()
+            if TEAM_A in names and TEAM_B in names:
+                return True
+            ids = {g.get("radiant_team", {}).get("team_id"), g.get("dire_team", {}).get("team_id")}
+            if ids & TEAM_IDS:
+                return True
+            return g.get("league_id") == LEAGUE
+
+        ours = [g for g in games if is_ours(g)]
 
         if not ours:
             # Say what the feed *does* carry, so a name mismatch is visible rather than silent.
             if time.time() - last_debug > 120:
-                names = ["%s vs %s" % (g.get("radiant_team", {}).get("team_name", "?"),
-                                       g.get("dire_team", {}).get("team_name", "?")) for g in games]
-                emit("%s | waiting | %d live league games: %s" % (stamp, len(games), "; ".join(names[:8]) or "none"))
+                names = ["%s vs %s [league %s, ids %s/%s]" % (
+                    g.get("radiant_team", {}).get("team_name", "?"),
+                    g.get("dire_team", {}).get("team_name", "?"),
+                    g.get("league_id"),
+                    g.get("radiant_team", {}).get("team_id"),
+                    g.get("dire_team", {}).get("team_id")) for g in games]
+                emit("%s | waiting | %d live league games: %s" % (stamp, len(games), "; ".join(names[:6]) or "none"))
                 last_debug = time.time()
             time.sleep(15)
             continue
