@@ -60,10 +60,15 @@ def emit(line):
         f.write(line + "\n")
     subprocess.run(["git", "add", LOG], check=True)
     subprocess.run(["git", "commit", "-q", "-m", "ticker: " + line[:70]], check=False)
-    for attempt in range(4):
+    branch = os.environ.get("GITHUB_REF_NAME", "HEAD")
+    for attempt in range(5):
         if subprocess.run(["git", "push", "-q", "origin", "HEAD"]).returncode == 0:
             return
+        # Another job pushed to the branch; rebase onto it instead of giving up,
+        # or the line never leaves the runner.
+        subprocess.run(["git", "pull", "--rebase", "-q", "origin", branch], check=False)
         time.sleep(2 ** attempt)
+    print("WARNING: could not push: " + line, flush=True)
 
 
 def main():
