@@ -1,0 +1,63 @@
+name: probe-draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      match_id:
+        description: "A finished match id to check picks/bans against"
+        required: false
+        default: "8960762254"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Which sources expose a live draft?
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          STRATZ_TOKEN: ${{ secrets.STRATZ_TOKEN }}
+          MATCH: ${{ github.event.inputs.match_id || '8960762254' }}
+        run: |
+          echo "=== 1. Valve GetLiveLeagueGames (needs a Steam Web API key)"
+          if [ -n "$STEAM_API_KEY" ]; then
+            curl -sS --max-time 30 "https://api.steampowered.com/IDOTA2Match_570/GetLiveLeagueGames/v1/?key=$STEAM_API_KEY" -o valve.json -w "HTTP %{http_code}\n"
+            jq -r '.result.games[]? | select((.radiant_team.team_name // "") + (.dire_team.team_name // "") | ascii_downcase | test("spirit|vision")) |
+              "league=\(.league_id) \(.radiant_team.team_name // "?") vs \(.dire_team.team_name // "?")\n" +
+              "  radiant picks: \([.scoreboard.radiant.picks[]?.hero_id] | join(","))\n" +
+              "  radiant bans : \([.scoreboard.radiant.bans[]?.hero_id] | join(","))\n" +
+              "  dire picks   : \([.scoreboard.dire.picks[]?.hero_id] | join(","))\n" +
+              "  dire bans    : \([.scoreboard.dire.bans[]?.hero_id] | join(","))\n" +
+              "  duration=\(.scoreboard.duration // 0)"' valve.json || head -c 400 valve.json
+          else
+            echo "SKIPPED - no STEAM_API_KEY secret set"
+            curl -sS --max-time 30 "https://api.steampowered.com/IDOTA2Match_570/GetLiveLeagueGames/v1/" -o noauth.json -w "without key: HTTP %{http_code}\n"
+            head -c 300 noauth.json; echo
+          fi
+
+          echo
+          echo "=== 2. Stratz GraphQL live (needs a token)"
+          if [ -n "$STRATZ_TOKEN" ]; then
+            curl -sS --max-time 30 -H "Authorization: Bearer $STRATZ_TOKEN" -H "Content-Type: application/json" \
+              -d '{"query":"{ live { matches(request:{take:50}) { matchId league { id } radiantTeam { name } direTeam { name } players { heroId isRadiant } } } }"}' \
+              https://api.stratz.com/graphql -o stratz.json -w "HTTP %{http_code}\n"
+            head -c 800 stratz.json; echo
+          else
+            echo "SKIPPED - no STRATZ_TOKEN secret set"
+            curl -sS --max-time 20 -o /dev/null -w "without token: HTTP %{http_code}\n" https://api.stratz.com/graphql || true
+          fi
+
+          echo
+          echo "=== 3. OpenDota /api/live - does it carry heroes during the draft?"
+          curl -sS --max-time 30 https://api.opendota.com/api/live > live.json
+          jq -r '[.[] | select(((.team_name_radiant + " " + .team_name_dire) | ascii_downcase) | test("vision") and test("spirit"))] |
+            if length == 0 then "no vision/spirit game in the live feed right now"
+            else .[] | "match \(.match_id) game_time=\(.game_time) heroes=\([.players[].hero_id] | join(",")) (0 = not picked yet)  bans field present: \(has("picks_bans"))"
+            end' live.json
+
+          echo
+          echo "=== 4. OpenDota finished-match picks_bans (ground truth for accuracy check)"
+          curl -sS --max-time 40 "https://api.opendota.com/api/matches/$MATCH" -o m.json -w "HTTP %{http_code}\n"
+          jq -r 'if .picks_bans then
+                   "match \(.match_id) radiant_win=\(.radiant_win) draft entries=\(.picks_bans | length)\n" +
+                   ([.picks_bans[] | "  order \(.order) \(if .is_pick then "PICK" else "BAN " end) team\(.team) hero \(.hero_id)"] | join("\n"))
+                 else "no picks_bans yet (match not parsed / still live)" end' m.json
