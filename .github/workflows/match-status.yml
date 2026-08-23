@@ -1,0 +1,56 @@
+name: match-status
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      series_id:
+        description: "OpenDota series id"
+        required: false
+        default: "1133004"
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Series + live status via OpenDota
+        env:
+          SERIES: ${{ github.event.inputs.series_id || '1133004' }}
+        run: |
+          curl -sS --max-time 45 https://api.opendota.com/api/proMatches > pro.json
+          curl -sS --max-time 45 https://api.opendota.com/api/live > live.json
+
+          echo "### SERIES $SERIES (finished games, newest first)"
+          jq -r --argjson s "$SERIES" '
+            [.[] | select(.series_id == $s)] | sort_by(.start_time) | reverse | .[] |
+            "match \(.match_id) | \(.league_name) | start \(.start_time | todate) | dur \((.duration/60)|floor)m | " +
+            "\(.radiant_name) \(.radiant_score) - \(.dire_score) \(.dire_name) | winner: " +
+            (if .radiant_win then .radiant_name else .dire_name end)
+          ' pro.json
+
+          echo
+          echo "### SERIES SCORE"
+          jq -r --argjson s "$SERIES" '
+            [.[] | select(.series_id == $s)] as $g |
+            ($g | map(if .radiant_win then .radiant_name else .dire_name end) | group_by(.) | map({team: .[0], wins: length})) as $w |
+            "games played: \($g|length)   " + ($w | map("\(.team) = \(.wins)") | join("   ")) +
+            "   (series_type \($g[0].series_type // "?"): 0=Bo1 1=Bo3 2=Bo5)"
+          ' pro.json
+
+          echo
+          echo "### LIVE GAMES involving these teams / same league"
+          jq -r '
+            [.[] | select((.team_name_radiant + .team_name_dire | ascii_downcase | test("spirit|vision")) or .league_id == 19719)] |
+            if length == 0 then "no live game found for these teams right now"
+            else .[] | "LIVE match \(.match_id) | league \(.league_id) | \(.team_name_radiant) \(.radiant_score) - \(.dire_score) \(.team_name_dire) | game_time \((.game_time/60)|floor)m | radiant_lead \(.radiant_lead)g"
+            end
+          ' live.json
+
+          echo
+          echo "### ALL LEAGUE (19719) MATCHES TODAY"
+          jq -r '
+            [.[] | select(.leagueid == 19719)] | sort_by(.start_time) | reverse | .[:12] | .[] |
+            "\(.start_time|todate) | \(.radiant_name) \(.radiant_score)-\(.dire_score) \(.dire_name) | winner: " +
+            (if .radiant_win then .radiant_name else .dire_name end)
+          ' pro.json
